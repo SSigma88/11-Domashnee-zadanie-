@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR Solar System AR</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: sans-serif;
+        }
+    </style>
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+</head>
+<body>
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+        let camera, scene, renderer;
+        let solarSystem, sun, earthOrbit, earth, marsOrbit, mars;
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.createElement('div');
+            document.body.appendChild(container);
+
+            scene = new THREE.Scene();
+
+            // Камера для WebXR
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // Настройка освещения
+            const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+
+            // Рендерер с поддержкой XR
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true; // Активируем WebXR сессию
+            container.appendChild(renderer.domElement);
+
+            // Добавляем кнопку "START AR" на экран
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['local'] }));
+
+            // Создаем корневой контейнер для Солнечной Системы
+            // Смещаем ее на 1.5 метра вперед (-1.5) и на 0.2 метра вниз, чтобы она красиво появлялась в комнате
+            solarSystem = new THREE.Group();
+            solarSystem.position.set(0, -0.2, -1.5);
+            solarSystem.scale.set(0.15, 0.15, 0.15); // Масштабируем под размеры комнаты
+            scene.add(solarSystem);
+
+            // 1. Солнце
+            const sunGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+            sun = new THREE.Mesh(sunGeo, sunMat);
+            solarSystem.add(sun);
+
+            // 2. Орбита и Земля
+            earthOrbit = new THREE.Group();
+            solarSystem.add(earthOrbit);
+
+            const earthGeo = new THREE.SphereGeometry(0.3, 32, 32);
+            const earthMat = new THREE.MeshStandardMaterial({ color: 0x0066ff, roughness: 0.4 });
+            earth = new THREE.Mesh(earthGeo, earthMat);
+            earth.position.x = 2.0; // Дистанция от Солнца
+            earthOrbit.add(earth);
+
+            // 3. Орбита и Марс
+            marsOrbit = new THREE.Group();
+            solarSystem.add(marsOrbit);
+
+            const marsGeo = new THREE.SphereGeometry(0.22, 32, 32);
+            const marsMat = new THREE.MeshStandardMaterial({ color: 0xcc4400, roughness: 0.5 });
+            mars = new THREE.Mesh(marsGeo, marsMat);
+            mars.position.x = 3.2; // Дистанция от Солнца
+            marsOrbit.add(mars);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            // Для WebXR вместо requestAnimationFrame используется setAnimationLoop
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+            // Вращение Солнца вокруг своей оси
+            sun.rotation.y += 0.005;
+
+            // Вращение планет по орбитам (вокруг Солнца)
+            earthOrbit.rotation.y += 0.01;  // Скорость Земли
+            marsOrbit.rotation.y += 0.007; // Скорость Марса
+
+            // Собственное вращение планет вокруг своей оси
+            earth.rotation.y += 0.02;
+            mars.rotation.y += 0.015;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
