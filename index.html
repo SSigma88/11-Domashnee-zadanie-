@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Solar System AR</title>
+    <title>WebXR Full Solar System AR</title>
     <style>
         body {
             margin: 0;
@@ -28,7 +28,22 @@
         import { ARButton } from 'three/addons/webxr/ARButton.js';
 
         let camera, scene, renderer;
-        let solarSystem, sun, earthOrbit, earth, marsOrbit, mars;
+        let solarSystem, sun;
+        
+        // Массив для хранения созданных планет, чтобы анимировать их в цикле
+        const planets = [];
+
+        // Конфигурация планет: радиус, цвет, расстояние от Солнца, скорость орбиты, скорость вращения
+        const planetsData = [
+            { name: 'Mercury', radius: 0.08, color: 0x8a8a8a, dist: 1.2, speed: 0.03, rotSpeed: 0.01 },
+            { name: 'Venus',   radius: 0.18, color: 0xe3bb76, dist: 1.7, speed: 0.02, rotSpeed: 0.005 },
+            { name: 'Earth',   radius: 0.20, color: 0x0066ff, dist: 2.3, speed: 0.015, rotSpeed: 0.02 },
+            { name: 'Mars',    radius: 0.14, color: 0xcc4400, dist: 2.9, speed: 0.01, rotSpeed: 0.018 },
+            { name: 'Jupiter', radius: 0.42, color: 0xd4a373, dist: 3.9, speed: 0.007, rotSpeed: 0.04 },
+            { name: 'Saturn',  radius: 0.35, color: 0xe2bf7d, dist: 5.1, speed: 0.005, rotSpeed: 0.035, hasRings: true },
+            { name: 'Uranus',  radius: 0.26, color: 0x73c7e6, dist: 6.2, speed: 0.003, rotSpeed: 0.03 },
+            { name: 'Neptune', radius: 0.24, color: 0x274687, dist: 7.2, speed: 0.002, rotSpeed: 0.03 }
+        ];
 
         init();
         animate();
@@ -39,59 +54,77 @@
 
             scene = new THREE.Scene();
 
-            // Камера для WebXR
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // Настройка освещения
-            const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            // Освещение (необходимо для MeshStandardMaterial)
+            const ambientLight = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.2);
             scene.add(ambientLight);
 
             const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
             dirLight.position.set(5, 10, 7);
             scene.add(dirLight);
 
-            // Рендерер с поддержкой XR
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true; // Активируем WebXR сессию
+            renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // Добавляем кнопку "START AR" на экран
             document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['local'] }));
 
-            // Создаем корневой контейнер для Солнечной Системы
-            // Смещаем ее на 1.5 метра вперед (-1.5) и на 0.2 метра вниз, чтобы она красиво появлялась в комнате
+            // Корневой контейнер всей системы
             solarSystem = new THREE.Group();
-            solarSystem.position.set(0, -0.2, -1.5);
-            solarSystem.scale.set(0.15, 0.15, 0.15); // Масштабируем под размеры комнаты
+            // Смещаем на 1.5 метра вперед и чуть ниже уровня глаз
+            solarSystem.position.set(0, -0.3, -1.5);
+            // Масштаб уменьшен до 0.12, чтобы даже Нептун (на расстоянии 7.2) вписывался в пределы ~85 см от центра
+            solarSystem.scale.set(0.12, 0.12, 0.12);
             scene.add(solarSystem);
 
-            // 1. Солнце
-            const sunGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            // Создаем Солнце
+            const sunGeo = new THREE.SphereGeometry(0.6, 32, 32);
             const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
             sun = new THREE.Mesh(sunGeo, sunMat);
             solarSystem.add(sun);
 
-            // 2. Орбита и Земля
-            earthOrbit = new THREE.Group();
-            solarSystem.add(earthOrbit);
+            // Генерация планет из массива данных
+            planetsData.forEach(data => {
+                // Создаем невидимую группу-орбиту, которая центрируется в Солнце
+                const orbitGroup = new THREE.Group();
+                solarSystem.add(orbitGroup);
 
-            const earthGeo = new THREE.SphereGeometry(0.3, 32, 32);
-            const earthMat = new THREE.MeshStandardMaterial({ color: 0x0066ff, roughness: 0.4 });
-            earth = new THREE.Mesh(earthGeo, earthMat);
-            earth.position.x = 2.0; // Дистанция от Солнца
-            earthOrbit.add(earth);
+                // Сама планета
+                const planetGeo = new THREE.SphereGeometry(data.radius, 32, 32);
+                const planetMat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.6 });
+                const planetMesh = new THREE.Mesh(planetGeo, planetMat);
+                
+                // Отодвигаем планету по оси X на ее дистанцию от Солнца
+                planetMesh.position.x = data.dist;
+                orbitGroup.add(planetMesh);
 
-            // 3. Орбита и Марс
-            marsOrbit = new THREE.Group();
-            solarSystem.add(marsOrbit);
+                // Если это Сатурн, строим кольца
+                if (data.hasRings) {
+                    const ringGeo = new THREE.RingGeometry(data.radius * 1.4, data.radius * 2.3, 32);
+                    // Поворачиваем кольцо горизонтально
+                    ringGeo.rotateX(Math.PI / 2);
+                    const ringMat = new THREE.MeshStandardMaterial({ 
+                        color: 0xbfa37a, 
+                        side: THREE.DoubleSide, 
+                        transparent: true, 
+                        opacity: 0.8 
+                    });
+                    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                    // Добавляем кольцо как дочерний объект планеты (оно будет двигаться вместе с ней)
+                    planetMesh.add(ringMesh);
+                }
 
-            const marsGeo = new THREE.SphereGeometry(0.22, 32, 32);
-            const marsMat = new THREE.MeshStandardMaterial({ color: 0xcc4400, roughness: 0.5 });
-            mars = new THREE.Mesh(marsGeo, marsMat);
-            mars.position.x = 3.2; // Дистанция от Солнца
-            marsOrbit.add(mars);
+                // Сохраняем ссылки для анимации
+                planets.push({
+                    orbit: orbitGroup,
+                    mesh: planetMesh,
+                    speed: data.speed,
+                    rotSpeed: data.rotSpeed
+                });
+            });
 
             window.addEventListener('resize', onWindowResize);
         }
@@ -103,21 +136,18 @@
         }
 
         function animate() {
-            // Для WebXR вместо requestAnimationFrame используется setAnimationLoop
             renderer.setAnimationLoop(render);
         }
 
         function render() {
-            // Вращение Солнца вокруг своей оси
-            sun.rotation.y += 0.005;
+            // Вращение Солнца
+            sun.rotation.y += 0.003;
 
-            // Вращение планет по орбитам (вокруг Солнца)
-            earthOrbit.rotation.y += 0.01;  // Скорость Земли
-            marsOrbit.rotation.y += 0.007; // Скорость Марса
-
-            // Собственное вращение планет вокруг своей оси
-            earth.rotation.y += 0.02;
-            mars.rotation.y += 0.015;
+            // Анимация всех планет одной командой через forEach
+            planets.forEach(p => {
+                p.orbit.rotation.y += p.speed;    // Движение по орбите вокруг Солнца
+                p.mesh.rotation.y += p.rotSpeed;  // Собственное вращение планеты вокруг оси
+            });
 
             renderer.render(scene, camera);
         }
